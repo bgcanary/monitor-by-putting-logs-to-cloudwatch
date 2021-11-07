@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  alert crontab result, and monitoring crontab
+
+Parameters:
+  SNSTopicARN:
+    Description: SNS Topic ARN for Notification
+    Type: String
+  ProjectName:
+    Description: Project Name
+    Type: String
+
+Resources:
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-logs-loggroup.html
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: !Sub /aws/ec2/${ProjectName}-service-status
+      RetentionInDays: 1
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-logs-logstream.html
+  LogStream:
+    Type: AWS::Logs::LogStream
+    Properties: 
+      LogGroupName: !Ref  LogGroup
+      LogStreamName: "service-status"
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-logs-metricfilter.html
+# aws logs describe-metric-filters --output yaml
+  MetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties: 
+      FilterPattern: "ActiveState=active"
+      LogGroupName: !Ref LogGroup
+      MetricTransformations: 
+      - DefaultValue: 0.0
+        MetricName: !Sub ${ProjectName}-filter-active
+        MetricNamespace: !Sub ${ProjectName}-service-status
+        MetricValue: 1
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-cw-alarm.html
+# aws cloudwatch describe-alarms --alarm-names "active-alarm"  --output yaml
+  CloudWatchAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties: 
+      ActionsEnabled: true
+      AlarmActions:
+      - Ref: SNSTopicARN
+      AlarmDescription: >-
+        Monitor ec2 service status log.
+      AlarmName: !Sub ${ProjectName}-active-alarm
+      ComparisonOperator: LessThanOrEqualToThreshold
+      DatapointsToAlarm: 1
+      Dimensions: []
+      EvaluationPeriods: 1
+      InsufficientDataActions: []
+      MetricName: !Sub ${ProjectName}-filter-active
+      Namespace: !Sub ${ProjectName}-service-status
+      Period: 300
+      Statistic: Sum
+      Threshold: 0.0
+      TreatMissingData: breaching
